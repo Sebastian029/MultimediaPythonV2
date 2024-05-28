@@ -1,5 +1,8 @@
 from flask import Flask, send_file, jsonify, abort, Response
 import os
+import librosa
+import numpy as np
+import matplotlib.pyplot as plt
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC
 
@@ -20,7 +23,8 @@ def list_media_files():
                     'name': f,
                     'title': base_name,
                     'image': f'get_cover/{f}',
-                    'path': f'get_mp3/{f}'
+                    'path': f'get_mp3/{f}',
+                    'waveform': f'get_waveform/{f}'  # Add waveform endpoint
                 })
         return jsonify(files)
     except Exception as e:
@@ -51,6 +55,27 @@ def get_cover(filename):
                 if isinstance(tag, APIC):
                     return Response(tag.data, mimetype=tag.mime)
             return abort(404)
+        except Exception as e:
+            return str(e), 500
+    else:
+        abort(404)
+
+@app.route('/get_waveform/<filename>')
+def get_waveform(filename):
+    file_path = os.path.join(MEDIA_DIR, filename)
+    if os.path.isfile(file_path):
+        try:
+            # Load audio file
+            y, sr = librosa.load(file_path)
+            # Compute the waveform
+            waveform = np.mean(librosa.feature.rms(y=y), axis=0)
+            # Normalize waveform to [0, 1]
+            waveform /= np.max(waveform)
+            # Resample to maximum length of 200
+            waveform_resampled = np.interp(np.linspace(0, len(waveform) - 1, 200), range(len(waveform)), waveform)
+            # Scale to [1, 100]
+            waveform_scaled = waveform_resampled * 99 + 1
+            return jsonify(waveform_scaled.tolist())
         except Exception as e:
             return str(e), 500
     else:

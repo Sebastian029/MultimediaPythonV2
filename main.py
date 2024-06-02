@@ -2,7 +2,6 @@ from flask import Flask, send_file, jsonify, abort, Response
 import os
 import librosa
 import numpy as np
-import matplotlib.pyplot as plt
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC
 
@@ -23,13 +22,24 @@ def list_media_files():
                 file_id = index + 1
                 file_ids[file_id] = f
                 base_name = os.path.splitext(f)[0]
+
+                # Assuming the filename format is "Artist - Name.mp3"
+                parts = base_name.split(' - ', 1)
+                if len(parts) == 2:
+                    artist, name = parts
+                else:
+                    artist = "Unknown Artist"
+                    name = base_name
+
                 files.append({
                     'id': file_id,
-                    'name': f,
+                    'name': name,
+                    'artist': artist,
                     'title': base_name,
                     'image': f'get_cover/{file_id}',
                     'path': f'get_mp3/{file_id}',
-                    'waveform': f'get_waveform/{file_id}'
+                    'waveform': f'get_waveform/{file_id}',
+                    'duration': f'get_duration/{file_id}'
                 })
         return jsonify(files)
     except Exception as e:
@@ -58,9 +68,11 @@ def get_mp3(file_id):
 def get_name(file_id):
     filename = file_ids.get(file_id)
     if filename:
-        return jsonify({'id': file_id, 'name': filename})
+        base_name = os.path.splitext(filename)[0]
+        return jsonify({'id': file_id, 'name': base_name})  # Remove .mp3 from the name
     else:
         abort(404)
+
 @app.route('/get_cover/<int:file_id>')
 def get_cover(file_id):
     filename = file_ids.get(file_id)
@@ -106,6 +118,25 @@ def get_waveform(file_id):
                 # Scale to [1, 100]
                 waveform_scaled = waveform_resampled * 99 + 1
                 return jsonify(waveform_scaled.tolist())
+            except Exception as e:
+                return str(e), 500
+        else:
+            abort(404)
+    else:
+        abort(404)
+
+@app.route('/get_duration/<int:file_id>')
+def get_duration(file_id):
+    filename = file_ids.get(file_id)
+    if filename:
+        file_path = os.path.join(MEDIA_DIR, filename)
+        if os.path.isfile(file_path):
+            try:
+                # Load audio file
+                y, sr = librosa.load(file_path)
+                # Calculate duration of the audio in seconds
+                duration = librosa.get_duration(y=y, sr=sr)
+                return jsonify({'id': file_id, 'duration': duration})
             except Exception as e:
                 return str(e), 500
         else:

@@ -2,19 +2,22 @@ from flask import Flask, send_file, jsonify, abort, Response
 import os
 import librosa
 import numpy as np
-from mutagen.mp3 import MP3
+from mutagen.mp3 import MP3, HeaderNotFoundError
 from mutagen.id3 import ID3, APIC
+import random
+
 
 app = Flask(__name__)
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 MEDIA_DIR = os.path.join(CURRENT_DIR, 'Audio')
-
+DEFAULT_IMAGE_PATH = os.path.join(CURRENT_DIR, "defaultImg.png")
 # Dictionary to store file IDs
 file_ids = {}
 
 @app.route('/media_files')
 def list_media_files():
+    print(DEFAULT_IMAGE_PATH)
     try:
         files = []
         for index, f in enumerate(os.listdir(MEDIA_DIR)):
@@ -85,10 +88,16 @@ def get_cover(file_id):
                     if isinstance(tag, APIC):
                         return Response(tag.data, mimetype=tag.mime)
                 return abort(404)
+            except HeaderNotFoundError:
+                # If MPEG frame sync fails, return the default image
+                with open(DEFAULT_IMAGE_PATH, "rb") as default_image_file:
+                    return Response(default_image_file.read(), mimetype="image/png")
             except Exception as e:
                 return str(e), 500
         else:
-            abort(404)
+            # If the file is not found, return the default image
+            with open(DEFAULT_IMAGE_PATH, "rb") as default_image_file:
+                return Response(default_image_file.read(), mimetype="image/png")
     else:
         abort(404)
 
@@ -141,6 +150,14 @@ def get_duration(file_id):
                 return str(e), 500
         else:
             abort(404)
+    else:
+        abort(404)
+
+@app.route('/random_song_id')
+def random_song_id():
+    if file_ids:
+        random_id = random.choice(list(file_ids.keys()))
+        return jsonify({'random_song_id': random_id})
     else:
         abort(404)
 
